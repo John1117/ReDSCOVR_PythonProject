@@ -55,6 +55,7 @@ def plot_demo(
 
     for j, i in enumerate(demo_idxs):
         plt.figure(figsize=(20, 7.5))
+        plt.title('Batch prediction demo', fontsize=30)
         plt.plot(input_idxs, series[i:i+input_window], 'k.', ms=20, label='Input')
         if plot_col_name in label_col_names:
             plt.plot(label_idxs, series[i+input_window+offset:i+input_window+offset+label_window], 'ko', mfc='w', ms=20, label='Label')
@@ -62,77 +63,7 @@ def plot_demo(
                 plt.plot(label_idxs, preds[j, :, :], 'b.', ms=20, label='Pred')
         plt.xticks(ticks=total_idxs, labels=total_idxs, fontsize=20)
         plt.yticks(ticks=range(10), labels=range(10), fontsize=20)
-        plt.xlabel(f'Time shift (x{t_res})', fontsize=30)
-        plt.ylabel(plot_col_name, fontsize=30)
-        
-        plt.legend(fontsize=20) 
-        plt.grid()
-        plt.show()
-
-
-"""import numpy as np
-import matplotlib.pyplot as plt
-import torch as tc"""
-
-
-def plot_demo(
-        df, 
-        train_mean,
-        train_std,
-        input_col_names=None, 
-        label_col_names=['Kp'], 
-        plot_col_name='Kp',
-        t_res='1min',
-        input_window=1, 
-        label_window=1, 
-        offset=0, 
-        max_demos=3, 
-        model=None
-    ):
-
-    data_len = len(df)
-    max_demos = min(max_demos, data_len)
-
-    demo_idxs = np.random.choice(data_len, size=max_demos, replace=False)
-
-    input_col_names = input_col_names
-    if input_col_names is None:
-        input_col_names = [name for name in df.columns]
-
-    label_col_names = label_col_names
-    if label_col_names is None:
-        label_col_names = [name for name in df.columns]
-
-    plot_col_name = plot_col_name
-    if plot_col_name is None:
-        plot_col_name = label_col_names[0]
-
-    mean = train_mean[plot_col_name]
-    std = train_std[plot_col_name]
-
-    if model is not None:
-        inputs = []
-        for i in demo_idxs:
-            input = df[input_col_names][i:i+input_window].to_numpy()
-            inputs.append(input)
-        inputs = tc.tensor(np.array(inputs))
-        preds = model(inputs).detach().numpy() * std + mean
-
-    input_idxs = np.arange(-input_window + 1, 0 + 1)
-    label_idxs = np.arange(offset, offset + label_window)
-    total_idxs = np.arange(-input_window+1, offset+label_window)
-
-    series = df[plot_col_name] * std + mean
-
-    for j, i in enumerate(demo_idxs):
-        plt.figure(figsize=(20, 7.5))
-        plt.plot(input_idxs, series[i:i+input_window], 'k.', ms=20, label='Input')
-        if plot_col_name in label_col_names:
-            plt.plot(label_idxs, series[i+input_window+offset:i+input_window+offset+label_window], 'ko', mfc='w', ms=20, label='Label')
-            if model is not None:
-                plt.plot(label_idxs, preds[j, :, :], 'b.', ms=20, label='Pred')
-        plt.xticks(ticks=total_idxs, labels=total_idxs, fontsize=20)
-        plt.yticks(ticks=range(10), labels=range(10), fontsize=20)
+        plt.ylim(-0.1, series[i:i+input_window].max()*2)
         plt.xlabel(f'Time shift (x{t_res})', fontsize=30)
         plt.ylabel(plot_col_name, fontsize=30)
         
@@ -147,13 +78,13 @@ def plot_series_pred(df, input_col_names, mean, std, model, start_idx, end_idx, 
     inputs = tc.tensor(df[input_col_names][input_idxs].to_numpy()).unsqueeze(0)
 
     pred_idxs = slice(start_idx + offset, end_idx)
-    labels = tc.tensor(df['Kp'][pred_idxs].to_numpy()) #.unsqueeze(0)
+    labels = tc.tensor(df['Kp'][pred_idxs].to_numpy())
     preds = model(inputs, return_series=True).squeeze()
     loss = loss_fn(preds, labels)
 
     pred_ts = df.index[pred_idxs]
     preds = preds.detach().numpy() * std + mean
-    plt.plot(pred_ts, preds, 'b-', label='Series pred')
+    plt.plot(pred_ts, preds, 'c-', label='Series pred')
     return np.sqrt(loss.squeeze().detach().numpy())
 
 def plot_batch_pred(df, input_col_names, mean, std, model, start_idx, end_idx, input_window, label_window, offset):
@@ -175,7 +106,7 @@ def plot_batch_pred(df, input_col_names, mean, std, model, start_idx, end_idx, i
         loss_running_sum += loss
         pred_pt = pred.detach().numpy() * std + mean
         preds.append(pred_pt)
-    plt.plot(pred_ts, preds, 'g-', label='Batch pred')
+    plt.plot(pred_ts, preds, 'b-', label='Batch pred')
     return np.sqrt(np.sum(loss_running_sum.squeeze().detach().numpy())/len(pred_start_idxs))
 
 def plot_series(
@@ -191,7 +122,7 @@ def plot_series(
         label_window=1, 
         offset=0, 
         model=None,
-        pred_type='both',
+        pred_type='both'
     ):
     
     data_len = len(df)
@@ -234,9 +165,9 @@ def plot_series(
     data_ts = df.index[data_idxs]
     data_pts = series[data_idxs]
 
-    plt.figure(figsize=(20, 10))
+    plt.figure(figsize=(20, 7.5))
 
-    plt.plot(data_ts, data_pts, 'k-', mfc='w', label='Data')
+    plt.plot(data_ts, data_pts, 'k-', mfc='w', label='True')
 
     title = ''
     if model is not None and plot_col_name in label_col_names:
@@ -251,10 +182,10 @@ def plot_series(
             batch_rmse = plot_batch_pred(df, input_col_names, mean, std, model, start_idx, end_idx, input_window, label_window, offset)
             title = f'RMSE (series, batch) = ({series_rmse:.7f}, {batch_rmse:.7f})'
 
-    plt.title(title, fontsize=20)
+    plt.title(title, fontsize=30)
     plt.legend(fontsize=20)
-    plt.xlabel('Time', fontsize=40)
-    plt.ylabel(plot_col_name, fontsize=40)
+    plt.xlabel('Datetime', fontsize=30)
+    plt.ylabel(plot_col_name, fontsize=30)
     plt.xticks(fontsize=20, rotation=-60)
     plt.yticks(ticks=range(10), labels=range(10), fontsize=20)
     plt.ylim(-0.2, data_pts.max()+1)

@@ -41,15 +41,20 @@ def split_dataframe(df: pd.DataFrame, split_ratio=0.75):
             return train_df, valid_df, test_df
 
 
-def standardize_dataframe(train_mean: pd.Series, train_std: pd.Series, train_df: pd.DataFrame, test_df: pd.DataFrame, valid_df=None):
-    train_df = (train_df - train_mean) / train_std
-    test_df = (test_df - train_mean) / train_std
-    if valid_df is None:
-        return train_df, test_df
-    else:
-        valid_df = (valid_df - train_mean) / train_std
-        return train_df, test_df, valid_df
-    
+def standardize_dataframe(train_mean: pd.Series, train_std: pd.Series, train_df: pd.DataFrame, test_df: pd.DataFrame):
+    col_names = train_df.columns
+    val_idxs = col_names[:70]
+    train_val_df = (train_df[val_idxs] - train_mean[val_idxs]) / train_std[val_idxs]
+    test_val_df = (test_df[val_idxs] - train_mean[val_idxs]) / train_std[val_idxs]
+
+    ck_idxs =  col_names[70:]
+    train_ck_df = train_df[ck_idxs]
+    test_ck_df = test_df[ck_idxs]
+
+    train_df = pd.concat([train_val_df, train_ck_df], axis=1)
+    test_df = pd.concat([test_val_df, test_ck_df], axis=1)
+    return train_df, test_df
+
 def fill_nan(with_nan_dfs, fill_nan_val=0):
     dfs = []
     if isinstance(fill_nan_val, (int, float)):
@@ -81,6 +86,8 @@ def preprocess_dataframe(df, t_res: pd.Timedelta('1min'), split_ratio=0.75, fill
 
 
 def make_tensordata(train_df, test_df, input_col_names=None, label_col_names=['Kp'], input_window=1, label_window=1, offset=1):
+    dtype = train_df.dtypes[0]
+
     input_col_names = input_col_names
     if input_col_names is None:
         input_col_names = [name for name in train_df.columns]
@@ -92,24 +99,20 @@ def make_tensordata(train_df, test_df, input_col_names=None, label_col_names=['K
     train_data_len = len(train_df)
     test_data_len = len(test_df)
 
-    train_inputs = []
-    train_labels = []
+    train_inputs = np.zeros((train_data_len - input_window - label_window - offset, input_window, len(input_col_names)), dtype=dtype)
+    train_labels = np.zeros((train_data_len - input_window - label_window - offset, label_window, len(label_col_names)), dtype=dtype)
     for i in range(train_data_len - input_window - label_window - offset):
-        input = train_df[input_col_names][i : i + input_window].to_numpy()
-        label = train_df[label_col_names][i + input_window + offset - 1 : i + input_window + offset - 1 + label_window].to_numpy()
-        train_inputs.append(input)
-        train_labels.append(label)
-    train_inputs = np.array(train_inputs)
-    train_labels = np.array(train_labels)
+        input = train_df[input_col_names][i : i + input_window] #.to_numpy()
+        label = train_df[label_col_names][i + input_window + offset - 1 : i + input_window + offset - 1 + label_window] #.to_numpy()
+        train_inputs[i] = input
+        train_labels[i] = label
 
-    test_inputs = []
-    test_labels = []
+    test_inputs = np.zeros((train_data_len - input_window - label_window - offset, input_window, len(input_col_names)), dtype=dtype)
+    test_labels = np.zeros((train_data_len - input_window - label_window - offset, label_window, len(label_col_names)), dtype=dtype)
     for i in range(test_data_len - input_window - label_window - offset):
         input = test_df[input_col_names][i : i + input_window].to_numpy()
         label  = test_df[label_col_names][i + input_window + offset - 1 : i + input_window + offset - 1 + label_window].to_numpy()
-        test_inputs.append(input)
-        test_labels.append(label)
-    test_inputs = np.array(test_inputs)
-    test_labels = np.array(test_labels)
+        test_inputs[i] = input
+        test_labels[i] = label
 
     return tc.tensor(train_inputs), tc.tensor(train_labels), tc.tensor(test_inputs), tc.tensor(test_labels)
